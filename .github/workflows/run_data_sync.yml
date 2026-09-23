@@ -227,7 +227,7 @@ jobs:
       - name: Run sync Intervals.icu script
         if: env.RUN_TYPE == 'intervals_icu'
         env:
-          INTERVALS_ICU_ATHLETE_ID: ${{ secrets.INTERVALS_ICU_ATHLETE_ID }}
+          INTERVALS_ICU_ATHLETE_ID: '0'
           INTERVALS_ICU_API_KEY: ${{ secrets.INTERVALS_ICU_API_KEY }}
           INTERVALS_ICU_START_DATE: ${{ vars.INTERVALS_ICU_START_DATE || '2026-05-25' }}
         run: |
