@@ -8,10 +8,9 @@ import asyncio
 import os
 import sys
 
+from config import FIT_FOLDER, GPX_FOLDER, JSON_FILE, SQL_FILE
+from garmin_sync import Garmin, download_new_activities, get_downloaded_ids
 
-from config import FIT_FOLDER, GPX_FOLDER, JSON_FILE, SQL_FILE, config
-from garmin_sync import Garmin, get_downloaded_ids
-from garmin_sync import download_new_activities, gather_with_concurrency
 from utils import make_activities_file
 
 if __name__ == "__main__":
@@ -76,9 +75,10 @@ if __name__ == "__main__":
             to_upload_files.append(os.path.join(GPX_FOLDER, f"{i}.gpx"))
 
     print("Files to sync:" + " ".join(to_upload_files))
+    # FIXME is com ok here?
     garmin_global_client = Garmin(
         secret_string_global,
-        config("sync", "garmin", "authentication_domain"),
+        "COM",
         is_only_running,
     )
     loop = asyncio.get_event_loop()
