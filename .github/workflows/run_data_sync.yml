@@ -231,7 +231,7 @@ jobs:
           INTERVALS_ICU_API_KEY: ${{ secrets.INTERVALS_ICU_API_KEY }}
           INTERVALS_ICU_START_DATE: ${{ vars.INTERVALS_ICU_START_DATE || '2026-05-25' }}
         run: |
-          python run_page/intervals_icu_sync.py "$INTERVALS_ICU_ATHLETE_ID" "$INTERVALS_ICU_API_KEY" --start-date "$INTERVALS_ICU_START_DATE"
+          python run_page/intervals_icu_sync.py --start-date "$INTERVALS_ICU_START_DATE"
         # Default syncs running activities only. To sync all types add --all
         # Start after the final activity already imported from Strava to avoid duplicates.
 

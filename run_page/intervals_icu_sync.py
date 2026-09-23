@@ -153,8 +153,8 @@ def run():
     parser = argparse.ArgumentParser(
         description="Sync running activities from Intervals.icu"
     )
-    parser.add_argument("athlete_id", help="Intervals.icu athlete ID")
-    parser.add_argument("api_key", help="Intervals.icu API key")
+    parser.add_argument("athlete_id", nargs="?", help="Intervals.icu athlete ID")
+    parser.add_argument("api_key", nargs="?", help="Intervals.icu API key")
     parser.add_argument(
         "--start-date",
         default="2015-01-01",
@@ -173,8 +173,13 @@ def run():
     )
     options = parser.parse_args()
 
+    athlete_id = options.athlete_id or os.environ.get("INTERVALS_ICU_ATHLETE_ID")
+    api_key = options.api_key or os.environ.get("INTERVALS_ICU_API_KEY")
+    if not athlete_id or not api_key:
+        parser.error("athlete ID and API key are required")
+
     today = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
-    client = IntervalsICU(options.athlete_id, options.api_key)
+    client = IntervalsICU(athlete_id, api_key)
     activities = client.get_activities(oldest=options.start_date, newest=today)
 
     if not options.sync_all:
