@@ -54,7 +54,7 @@ function Dashboard() {
   const routeSectionRef = useRef<HTMLDivElement>(null);
   const activities = getActivityData() as Activity[];
   const { dark, toggle } = useTheme();
-  const { t } = useLocale();
+  const { t, locale } = useLocale();
   const [filter] = useState('all' as const);
   const [year, setYear] = useState<number | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<Activity | null>(
@@ -135,6 +135,12 @@ function Dashboard() {
         page={page}
         onNavigate={navigate}
       />
+
+      <p className="mx-auto max-w-[1400px] px-4 pt-4 text-xs text-[var(--color-muted)] sm:px-6">
+        {locale === 'zh'
+          ? '运动数据由 Garmin Forerunner 265 记录，通过 Intervals.icu 同步。'
+          : 'Activities recorded with Garmin Forerunner 265 and synced via Intervals.icu.'}
+      </p>
 
       <Suspense
         fallback={
