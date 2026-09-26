@@ -23,6 +23,9 @@ on:
         required: true
         type: string
         default: track_data
+    secrets:
+      MAPBOX_TOKEN:
+        required: false
 
 concurrency:
   group: pages
