@@ -291,8 +291,12 @@ jobs:
           git config --local user.email 'action@github.com'
           git config --local user.name 'GitHub Action'
           git add .
-          git commit -m 'update new runs' || echo 'nothing to commit'
-          git push || echo 'nothing to push'
+          if git diff --cached --quiet; then
+            echo 'nothing to commit'
+          else
+            git commit -m 'update new runs'
+            git push
+          fi
 
       - name: Set Output
         id: set_output
