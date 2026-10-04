@@ -8,6 +8,7 @@ interface SyncReport {
   matched_count: number;
   missing_count: number;
   start_date: string;
+  deduplicated_count?: number;
 }
 
 export function SyncStatus() {
@@ -39,6 +40,14 @@ export function SyncStatus() {
             {zh
               ? `自 ${report.start_date} 起已核对 ${report.matched_count}/${report.source_count} 条活动`
               : `${report.matched_count}/${report.source_count} activities checked since ${report.start_date}`}
+            {!!report.deduplicated_count && (
+              <>
+                {' · '}
+                {zh
+                  ? `${report.deduplicated_count} 条重复来源已归并`
+                  : `${report.deduplicated_count} duplicate sources grouped`}
+              </>
+            )}
             {(stale || incomplete) && (
               <span className="ml-2 text-amber-600 dark:text-amber-400">
                 {zh

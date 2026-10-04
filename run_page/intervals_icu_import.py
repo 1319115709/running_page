@@ -1,7 +1,7 @@
 """Import summaries independently of GPS/FIT availability and reconcile by source ID."""
 
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -101,12 +101,45 @@ def import_summaries(session, activities):
     return mapping, created
 
 
+def consolidate_duplicates(session, mapping, file_sizes):
+    """Hide exact positive-distance duplicates without deleting any source rows."""
+    groups = defaultdict(list)
+    for activity in session.query(Activity).filter_by(source="intervals_icu"):
+        if not activity.distance or activity.distance <= 0:
+            continue
+        fingerprint = (
+            activity.start_date_local,
+            activity.start_date,
+            activity.type,
+            activity.distance,
+        )
+        groups[fingerprint].append(activity)
+    for group in groups.values():
+        canonical = max(
+            group,
+            key=lambda a: (
+                file_sizes.get(a.source_id, 0),
+                a.average_heartrate is not None,
+                a.run_id > 0,
+                -abs(a.run_id),
+            ),
+        )
+        for activity in group:
+            activity.duplicate_of = None if activity is canonical else canonical.run_id
+            if activity.source_id in mapping:
+                mapping[activity.source_id] = canonical.run_id
+    session.flush()
+    return len(mapping) - len(set(mapping.values()))
+
+
 def reconcile(activities, exported, mapping, start_date, checked_at):
     rows = {row["run_id"]: row for row in exported}
     missing = [
         source_id
         for source_id, run_id in mapping.items()
-        if run_id not in rows or rows[run_id].get("source_id") != source_id
+        if run_id not in rows
+        or source_id
+        not in rows[run_id].get("source_ids", [rows[run_id].get("source_id")])
     ]
     if missing or len(mapping) != len(activities) or len(rows) != len(exported):
         raise RuntimeError("Activity export does not match upstream source IDs")
@@ -121,6 +154,7 @@ def reconcile(activities, exported, mapping, start_date, checked_at):
             sorted(Counter(a.get("type") or "Workout" for a in activities).items())
         ),
         "exported_count": len(exported),
+        "deduplicated_count": len(mapping) - len(set(mapping.values())),
         "latest_activity": max(
             (a["start_date_local"] for a in activities), default=None
         ),

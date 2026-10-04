@@ -14,7 +14,7 @@ from config import BASE_TIMEZONE, FOLDER_DICT, JSON_FILE, SQL_FILE
 from generator import Generator
 from generator.db import Activity, g
 from gpxtrackposter.track_loader import load_fit_file, load_gpx_file, load_tcx_file
-from intervals_icu_import import import_summaries, reconcile
+from intervals_icu_import import consolidate_duplicates, import_summaries, reconcile
 from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
 from urllib3.util.retry import Retry
@@ -303,6 +303,15 @@ def run():
     generator = Generator(SQL_FILE)
     mapping, created = import_summaries(generator.session, activities)
     hydrate_routes(generator.session, candidates, mapping)
+    file_sizes = {
+        f"intervals_icu:{raw['id']}": os.path.getsize(
+            os.path.join(
+                FOLDER_DICT[file_type], f"{str(raw['id']).lstrip('i')}.{file_type}"
+            )
+        )
+        for raw, file_type in candidates
+    }
+    consolidate_duplicates(generator.session, mapping, file_sizes)
     generator.session.commit()
     exported = generator.load(include_zero=True, virtual_indoor_routes=False)
     report = reconcile(
@@ -325,6 +334,7 @@ def run():
         f"- Period: {options.start_date} to {today}\n"
         f"- Source activities: {in_scope_count}; matched: {len(mapping)}; missing: 0\n"
         f"- New summaries: {created}; exported history: {len(exported)}\n"
+        f"- Exact duplicate sources grouped: {report['deduplicated_count']}\n"
         f"- Activity types: {json.dumps(report['by_type'])}\n"
         f"- Supported files: {total}; downloaded: {downloaded_count}; "
         f"unavailable: {report['files_unavailable']}\n"

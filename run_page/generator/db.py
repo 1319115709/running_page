@@ -68,6 +68,7 @@ class Activity(Base):
     elevation_gain = Column(Float)
     source = Column(String)
     source_id = Column(String, unique=True)
+    duplicate_of = Column(Integer)
     streak = None
 
     def to_dict(self):

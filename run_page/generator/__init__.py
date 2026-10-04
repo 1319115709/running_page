@@ -235,7 +235,7 @@ class Generator:
 
     def load(self, include_zero=False, virtual_indoor_routes=True):
         # if sub_type is not in the db, just add an empty string to it
-        query = self.session.query(Activity)
+        query = self.session.query(Activity).filter(Activity.duplicate_of.is_(None))
         if not include_zero:
             query = query.filter(Activity.distance > 0.1)
         if self.only_run:
@@ -243,6 +243,11 @@ class Generator:
 
         activities = query.order_by(Activity.start_date_local)
         activity_list = []
+        source_ids = {}
+        for run_id, source_id, duplicate_of in self.session.query(
+            Activity.run_id, Activity.source_id, Activity.duplicate_of
+        ).filter(Activity.source_id.isnot(None)):
+            source_ids.setdefault(duplicate_of or run_id, []).append(source_id)
 
         streak = 0
         last_date = None
@@ -264,7 +269,10 @@ class Generator:
             last_date = date
             if not IGNORE_BEFORE_SAVING:
                 activity.summary_polyline = filter_out(activity.summary_polyline)  # type: ignore
-            activity_list.append(activity.to_dict())
+            row = activity.to_dict()
+            if activity.run_id in source_ids:
+                row["source_ids"] = sorted(source_ids[activity.run_id])
+            activity_list.append(row)
 
         if virtual_indoor_routes:
             activity_list = self._fix_indoor_locations(activity_list)
@@ -272,7 +280,7 @@ class Generator:
         # Persist indoor subtype and virtual polyline back to DB so SVG generation can pick it up
         for a in activity_list:
             if a.get("subtype") == "indoor":
-                db_activity = self.session.query(Activity).get(a["run_id"])
+                db_activity = self.session.get(Activity, a["run_id"])
                 if db_activity:
                     if db_activity.subtype != "indoor":
                         db_activity.subtype = "indoor"

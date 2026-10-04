@@ -8,7 +8,12 @@ from unittest.mock import patch
 
 from generator import Generator
 from generator.db import Activity, init_db
-from intervals_icu_import import activity_values, import_summaries, reconcile
+from intervals_icu_import import (
+    activity_values,
+    consolidate_duplicates,
+    import_summaries,
+    reconcile,
+)
 from intervals_icu_sync import hydrate_routes
 
 
@@ -169,8 +174,34 @@ class ImportTests(unittest.TestCase):
         with patch.object(generator, "_fix_indoor_locations") as virtual_routes:
             rows = generator.load(include_zero=True, virtual_indoor_routes=False)
             virtual_routes.assert_not_called()
-        self.assertEqual(rows[0]["summary_polyline"], "")
+        self.assertFalse(rows[0]["summary_polyline"])
         self.assertEqual(rows[0]["distance"], 5000)
+        generator.session.close()
+        generator.session.bind.dispose()
+
+    def test_duplicate_sources_are_grouped_without_deleting_original_records(self):
+        first = summary(type="Run", distance=5000)
+        second = summary("i43", type="VirtualRun", distance=5000, average_heartrate=150)
+        nearby = summary(
+            "i44", type="Run", distance=5000, start_date_local="2026-09-24T16:00:20"
+        )
+        source = [first, second, nearby]
+        mapping, _ = import_summaries(self.session, source)
+        sizes = {"intervals_icu:i42": 600, "intervals_icu:i43": 30000}
+        self.assertEqual(consolidate_duplicates(self.session, mapping, sizes), 1)
+        self.session.commit()
+        self.assertEqual(self.session.query(Activity).count(), 3)
+        self.assertEqual(self.session.get(Activity, -42).duplicate_of, -43)
+        generator = Generator(self.path)
+        rows = generator.load(include_zero=True, virtual_indoor_routes=False)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(sum(row["distance"] for row in rows), 10000)
+        report = reconcile(source, rows, mapping, "2026-05-25", "now")
+        self.assertEqual(report["matched_count"], 3)
+        self.assertEqual(report["deduplicated_count"], 1)
+        mapping, created = import_summaries(self.session, source)
+        self.assertEqual(created, 0)
+        self.assertEqual(consolidate_duplicates(self.session, mapping, sizes), 1)
         generator.session.close()
         generator.session.bind.dispose()
 
