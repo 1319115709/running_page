@@ -1,6 +1,6 @@
 {
   "provider": "intervals_icu",
-  "checked_at": "2026-10-04T01:50:49.112239+00:00",
+  "checked_at": "2026-10-04T01:55:47.755073+00:00",
   "start_date": "2026-05-25",
   "source_count": 53,
   "matched_count": 53,
@@ -16,7 +16,7 @@
   },
   "exported_count": 885,
   "latest_activity": "2026-10-02T11:15:17",
-  "files_downloaded": 39,
+  "files_downloaded": 0,
   "files_supported": 53,
   "files_unavailable": 0
 }
