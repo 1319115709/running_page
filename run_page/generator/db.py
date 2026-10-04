@@ -44,6 +44,8 @@ ACTIVITY_KEYS = [
     "average_heartrate",
     "average_speed",
     "elevation_gain",
+    "source",
+    "source_id",
 ]
 
 
@@ -64,6 +66,8 @@ class Activity(Base):
     average_heartrate = Column(Float)
     average_speed = Column(Float)
     elevation_gain = Column(Float)
+    source = Column(String)
+    source_id = Column(String, unique=True)
     streak = None
 
     def to_dict(self):
@@ -186,6 +190,7 @@ def add_missing_columns(engine, model):
                         f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column_type}"
                     )
                 )
+            conn.commit()
 
 
 def init_db(db_path):

@@ -159,7 +159,18 @@ export function TracksPage({
 
   const withPolyline = useMemo(
     () =>
-      base.filter((a) => a.summary_polyline && a.summary_polyline.length > 20),
+      base.filter(
+        (a) =>
+          a.summary_polyline &&
+          a.summary_polyline.length > 20 &&
+          ![
+            'indoor',
+            'treadmill',
+            'indoor_running',
+            'virtualrun',
+            'virtual_run',
+          ].includes((a.subtype ?? '').toLowerCase())
+      ),
     [base]
   );
 

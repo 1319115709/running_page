@@ -26,6 +26,7 @@ import { CalendarWidget } from '@/components/CalendarWidget';
 import { ProfileCard } from '@/components/ProfileCard';
 import { PersonalBest } from '@/components/PersonalBest';
 import { ChinaMap } from '@/components/ChinaMap';
+import { SyncStatus } from '@/components/SyncStatus';
 
 const TracksPage = lazy(() =>
   import('@/components/TracksPage').then((module) => ({
@@ -86,6 +87,14 @@ function Dashboard() {
   const [currentYear] = useState(() => new Date().getFullYear());
   const years = useMemo(() => getAvailableYears(activities), [activities]);
   const filtered = useFilteredActivities(activities, filter, year);
+  const runs = useMemo(
+    () =>
+      activities.filter(
+        (activity) => activity.type === 'Run' && activity.distance > 0
+      ),
+    [activities]
+  );
+  const filteredRuns = useFilteredActivities(runs, 'Run', year);
   const heatmapYear = year ?? years[0] ?? currentYear;
 
   // Activities filtered to the selected province (for RouteMap)
@@ -136,11 +145,7 @@ function Dashboard() {
         onNavigate={navigate}
       />
 
-      <p className="mx-auto max-w-[1400px] px-4 pt-4 text-xs text-[var(--color-muted)] sm:px-6">
-        {locale === 'zh'
-          ? '运动数据由 Garmin Forerunner 265 记录，通过 Intervals.icu 同步。'
-          : 'Activities recorded with Garmin Forerunner 265 and synced via Intervals.icu.'}
-      </p>
+      <SyncStatus />
 
       <Suspense
         fallback={
@@ -177,11 +182,16 @@ function Dashboard() {
             <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[1fr_360px] xl:grid-cols-[1fr_380px]">
               {/* Left column */}
               <div className="min-w-0 space-y-6 overflow-hidden">
+                <p className="text-xs text-[var(--color-muted)]">
+                  {locale === 'zh'
+                    ? '目标仅计算跑步里程，活动日志保留全部运动。'
+                    : 'Goals count running distance; the activity log includes all sports.'}
+                </p>
                 <StatsCards
-                  activities={filtered}
-                  allActivities={activities}
+                  activities={filteredRuns}
+                  allActivities={runs}
                   year={year}
-                  filter={filter}
+                  filter="Run"
                   onSelectActivity={selectActivity}
                 />
                 <ContributionHeatmap

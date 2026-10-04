@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { Activity, SportFilter } from '../types';
 import { formatDuration, formatPace } from '../hooks/useActivities';
 import { useLocale } from '../hooks/useLocale';
+import { activityIcon, activityLabel } from '../core/activityLabels';
 
 interface ActivityLogProps {
   activities: Activity[];
@@ -17,13 +18,6 @@ const PAGE_SIZE = 16;
 
 type DistanceFilter = 'all' | '10' | '20' | '40';
 
-function typeIcon(type: string): string {
-  const icons: Record<string, string> = {
-    Run: '🏃',
-  };
-  return icons[type] ?? '📌';
-}
-
 export function ActivityLog({
   activities,
   years,
@@ -35,9 +29,15 @@ export function ActivityLog({
   const { t, locale } = useLocale();
   const [page, setPage] = useState(0);
   const [distFilter, setDistFilter] = useState<DistanceFilter>('all');
+  const [sport, setSport] = useState('all');
+  const sports = useMemo(
+    () => [...new Set(activities.map((activity) => activity.type))].sort(),
+    [activities]
+  );
 
   const sorted = useMemo(() => {
     const filtered = activities.filter((a) => {
+      if (sport !== 'all' && a.type !== sport) return false;
       const km = a.distance / 1000;
       switch (distFilter) {
         case '10':
@@ -55,7 +55,7 @@ export function ActivityLog({
         new Date(b.start_date_local).getTime() -
         new Date(a.start_date_local).getTime()
     );
-  }, [activities, distFilter]);
+  }, [activities, distFilter, sport]);
   const selectedId = selectedActivity?.run_id;
   const [previousSelection, setPreviousSelection] = useState(selectedId);
   const [previousSorted, setPreviousSorted] = useState(sorted);
@@ -65,6 +65,8 @@ export function ActivityLog({
     const idx = sorted.findIndex((a) => a.run_id === selectedId);
     if (idx >= 0) {
       setPage(Math.floor(idx / PAGE_SIZE));
+    } else if (selectedId != null && sport !== 'all') {
+      setSport('all');
     } else if (selectedId != null && distFilter !== 'all') {
       setDistFilter('all');
     } else {
@@ -92,6 +94,26 @@ export function ActivityLog({
           {sorted.length}
         </span>
       </div>
+
+      <label className="mb-3 flex items-center gap-2 text-xs text-[var(--color-muted)]">
+        {locale === 'zh' ? '运动类型' : 'Sport'}
+        <select
+          value={sport}
+          onChange={(event) => {
+            onSelectActivity?.(null);
+            setSport(event.target.value);
+            setPage(0);
+          }}
+          className="rounded border border-[var(--color-border)] bg-[var(--color-card)] px-2 py-1"
+        >
+          <option value="all">{t('all')}</option>
+          {sports.map((type) => (
+            <option key={type} value={type}>
+              {activityLabel(type, locale)}
+            </option>
+          ))}
+        </select>
+      </label>
 
       {/* Year tabs */}
       <div
@@ -216,21 +238,23 @@ export function ActivityLog({
                 </td>
                 <td className="py-3">
                   <span className="text-[var(--color-muted)]">
-                    {typeIcon(a.type)} {a.type}
+                    {activityIcon(a.type)} {activityLabel(a.type, locale)}
                   </span>
                 </td>
                 <td className="py-3">{a.name || t('run')}</td>
                 <td className="py-3 font-mono font-medium">
-                  {(a.distance / 1000).toFixed(1)}
-                  <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
-                    km
-                  </span>
+                  {a.distance > 0 ? (a.distance / 1000).toFixed(1) : '—'}
+                  {a.distance > 0 && (
+                    <span className="ml-1 text-xs font-normal text-[var(--color-muted)]">
+                      km
+                    </span>
+                  )}
                 </td>
                 <td className="py-3 text-[var(--color-muted)]">
                   {formatDuration(a.moving_time)}
                 </td>
                 <td className="py-3 text-[var(--color-muted)]">
-                  {formatPace(a.average_speed)}
+                  {a.distance > 0 ? formatPace(a.average_speed) : '—'}
                 </td>
                 <td className="py-3 text-[var(--color-muted)]">
                   {a.average_heartrate ? Math.round(a.average_heartrate) : '--'}

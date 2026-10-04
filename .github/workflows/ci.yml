@@ -32,6 +32,9 @@ jobs:
           # make sure the gpx_sync.py script is executable
           python run_page/gpx_sync.py
 
+      - name: Verify Intervals.icu summary import and reconciliation
+        run: PYTHONPATH=run_page python -m unittest discover -s tests -p 'test_intervals_icu.py'
+
       - name: Check formatting (black)
         run: black . --diff --color && black . --check
 
@@ -67,6 +70,7 @@ jobs:
       - name: Run check and build
         run: |
           pnpm run check
+          pnpm run typecheck
           pnpm run lint
           pnpm run build
         env:

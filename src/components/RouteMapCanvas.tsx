@@ -52,7 +52,18 @@ export function RouteMapCanvas({
     return items.flatMap((activity) => {
       const cached = routeCache.get(activity);
       if (cached) return cached;
-      if (!activity.summary_polyline) return [];
+      // Indoor reference polylines are not GPS recordings.
+      if (
+        !activity.summary_polyline ||
+        [
+          'indoor',
+          'treadmill',
+          'indoor_running',
+          'virtualrun',
+          'virtual_run',
+        ].includes((activity.subtype ?? '').toLowerCase())
+      )
+        return [];
       try {
         const coordinates = polyline
           .decode(activity.summary_polyline)
@@ -187,9 +198,8 @@ export function RouteMapCanvas({
     const map = mapRef.current;
     if (!map) return;
     let failed = false;
-    const onError = (event: mapboxgl.ErrorEvent) => {
-      const code = (event.error as Error & { status?: number }).status;
-      if (provider === 'mapbox' && (code === 401 || code === 403)) {
+    const onError = () => {
+      if (provider === 'mapbox') {
         setProvider('carto');
       } else {
         failed = true;
@@ -206,11 +216,14 @@ export function RouteMapCanvas({
     styleReadyRef.current = false;
     map.setStyle(style, {
       diff: false,
-      localFontFamily: undefined,
+      localFontFamily: 'sans-serif',
       localIdeographFontFamily: 'sans-serif',
     });
     const timer = window.setTimeout(() => {
-      if (!map.isStyleLoaded()) setStatus('error');
+      if (!map.isStyleLoaded()) {
+        if (provider === 'mapbox') setProvider('carto');
+        else setStatus('error');
+      }
     }, 15000);
     return () => {
       window.clearTimeout(timer);

@@ -7,6 +7,8 @@ import {
   extractProvince,
 } from '../hooks/useActivities';
 import { AVATAR } from '../config';
+import { activityIcon } from '../core/activityLabels';
+import { formatDuration } from '../hooks/useActivities';
 
 interface ProfileCardProps {
   activities: Activity[];
@@ -227,12 +229,14 @@ export const ProfileCard = memo(function ProfileCard({
             {locale === 'zh' ? '最近活动' : 'Latest Activity'}
           </p>
           <p className="text-sm font-medium">
-            {latest.type === 'Run' ? '🏃 ' : '🚴 '}
-            {latest.name || (latest.type === 'Run' ? 'Run' : 'Ride')}
+            {activityIcon(latest.type)} {latest.name || latest.type}
             <span className="font-normal text-[var(--color-muted)]">
               {' '}
-              · {formatDistance(latest.distance)} km ·{' '}
-              {formatDate(latest.start_date_local)}
+              ·{' '}
+              {latest.distance > 0
+                ? `${(latest.distance / 1000).toFixed(1)} km`
+                : formatDuration(latest.moving_time)}{' '}
+              · {formatDate(latest.start_date_local)}
             </span>
           </p>
         </div>

@@ -4,15 +4,20 @@ import json
 import os
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 import eviltransform
 import gpxpy
 import requests
-from config import FOLDER_DICT, JSON_FILE, SQL_FILE
+from config import BASE_TIMEZONE, FOLDER_DICT, JSON_FILE, SQL_FILE
+from generator import Generator
+from generator.db import Activity, g
+from gpxtrackposter.track_loader import load_fit_file, load_gpx_file, load_tcx_file
+from intervals_icu_import import import_summaries, reconcile
+from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
-
-from utils import make_activities_file
+from urllib3.util.retry import Retry
 
 BASE_URL = "https://intervals.icu/api/v1"
 RUNNING_TYPES = ["Run", "VirtualRun", "TrailRun"]
@@ -26,6 +31,17 @@ class IntervalsICU:
         self.session = requests.Session()
         self.session.auth = HTTPBasicAuth("API_KEY", api_key)
         self.session.headers["Accept"] = "application/json"
+        self.session.mount(
+            "https://",
+            HTTPAdapter(
+                max_retries=Retry(
+                    total=3,
+                    backoff_factor=1,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                    allowed_methods=["GET"],
+                )
+            ),
+        )
 
     def get_activities(self, oldest, newest):
         url = (
@@ -34,7 +50,10 @@ class IntervalsICU:
         )
         response = self.session.get(url, timeout=60)
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        if not isinstance(data, list):
+            raise TypeError("Expected an activity list from Intervals.icu")
+        return data
 
     def download_activity_file(self, activity_id, file_type, output_folder):
         url = f"{BASE_URL}/activity/{activity_id}/file"
@@ -60,6 +79,40 @@ class IntervalsICU:
 
 def get_downloaded_ids(folder):
     return [i.split(".")[0] for i in os.listdir(folder) if not i.startswith(".")]
+
+
+def hydrate_routes(session, candidates, mapping):
+    """Attach file data to provider-mapped rows, including files arriving after summaries."""
+    loaders = {"fit": load_fit_file, "gpx": load_gpx_file, "tcx": load_tcx_file}
+    for raw, file_type in candidates:
+        if not raw.get("distance"):
+            continue
+        path = os.path.join(
+            FOLDER_DICT[file_type], f"{str(raw['id']).lstrip('i')}.{file_type}"
+        )
+        track = loaders[file_type](path)
+        if not track.start_time or not track.length:
+            raise ValueError(f"Could not parse distance activity {raw['id']}")
+        activity = session.get(Activity, mapping[f"intervals_icu:{raw['id']}"])
+        if track.polyline_str:
+            activity.summary_polyline = track.polyline_str
+        if track.subtype:
+            activity.subtype = track.subtype
+        if activity.average_heartrate is None and track.average_heartrate is not None:
+            activity.average_heartrate = track.average_heartrate
+        if activity.elevation_gain is None and track.elevation_gain is not None:
+            activity.elevation_gain = track.elevation_gain
+        if not activity.location_country and track.start_latlng:
+            try:
+                activity.location_country = str(
+                    g.reverse(
+                        f"{track.start_latlng.lat}, {track.start_latlng.lon}",
+                        language="zh-CN",
+                        timeout=15,
+                    )
+                )
+            except Exception:  # noqa: BLE001
+                print(f"Location unavailable for {raw['id']}; route is preserved")
 
 
 def correct_gpx_gcj02(file_path):
@@ -152,9 +205,7 @@ def correct_file_gcj02(file_path, file_type):
 
 
 def run():
-    parser = argparse.ArgumentParser(
-        description="Sync running activities from Intervals.icu"
-    )
+    parser = argparse.ArgumentParser(description="Sync activities from Intervals.icu")
     parser.add_argument("athlete_id", nargs="?", help="Intervals.icu athlete ID")
     parser.add_argument("api_key", nargs="?", help="Intervals.icu API key")
     parser.add_argument(
@@ -180,9 +231,17 @@ def run():
     if not athlete_id or not api_key:
         parser.error("athlete ID and API key are required")
 
-    today = datetime.now().strftime("%Y-%m-%d")  # noqa: DTZ005
+    today = datetime.now(ZoneInfo(BASE_TIMEZONE)).strftime("%Y-%m-%d")
     client = IntervalsICU(athlete_id, api_key)
     activities = client.get_activities(oldest=options.start_date, newest=today)
+    report_path = os.path.join(os.path.dirname(JSON_FILE), "sync_status.json")
+    if not activities and os.path.exists(report_path):
+        with open(report_path, encoding="utf-8") as f:
+            previous = json.load(f)
+        if previous.get("start_date") == options.start_date and previous.get(
+            "source_count"
+        ):
+            raise RuntimeError("Upstream returned no activities after a populated sync")
     fetched_count = len(activities)
 
     if not options.sync_all:
@@ -193,7 +252,6 @@ def run():
     in_scope_count = len(activities)
     # Only activities with a declared file type and supported folder mapping
     candidates = []
-    activity_title_dict = {}
     skipped_no_file = 0
     skipped_unsupported_file = 0
     for activity in activities:
@@ -206,14 +264,9 @@ def run():
             skipped_unsupported_file += 1
             continue
         candidates.append((activity, file_type))
-        # Build title dict keyed by numeric ID (matching downloaded filename)
-        numeric_id = str(activity["id"]).lstrip("i")
-        if activity.get("name"):
-            activity_title_dict[numeric_id] = activity["name"]
 
     downloaded_count = 0
     failed_downloads = []
-    all_file_types = {ft for _, ft in candidates}
     total = len(candidates)
     print(
         f"Intervals.icu: fetched {fetched_count}, in scope {in_scope_count}, "
@@ -248,33 +301,43 @@ def run():
     if failed_downloads:
         raise RuntimeError(f"Failed to download {len(failed_downloads)} activities")
 
-    for file_type in all_file_types:
-        make_activities_file(
-            SQL_FILE,
-            FOLDER_DICT[file_type],
-            JSON_FILE,
-            file_suffix=file_type,
-            activity_title_dict=activity_title_dict,
-        )
-
-    with open(JSON_FILE, encoding="utf-8") as f:
-        exported = json.load(f)
-    expected_dates = {
-        activity["start_date_local"][:19].replace("T", " ")
-        for activity, _ in candidates
-        if (activity.get("distance") or 0) >= 100
-    }
-    exported_dates = {activity["start_date_local"] for activity in exported}
-    missing_dates = expected_dates - exported_dates
+    generator = Generator(SQL_FILE)
+    mapping, created = import_summaries(generator.session, activities)
+    hydrate_routes(generator.session, candidates, mapping)
+    generator.session.commit()
+    exported = generator.load(include_zero=True)
+    report = reconcile(
+        activities,
+        exported,
+        mapping,
+        options.start_date,
+        datetime.now(UTC).isoformat(),
+    )
+    report["files_downloaded"] = downloaded_count
+    report["files_supported"] = total
+    report["files_unavailable"] = skipped_no_file + skipped_unsupported_file
+    with open(JSON_FILE, "w", encoding="utf-8") as f:
+        json.dump(exported, f, ensure_ascii=False)
+    with open(report_path, "w", encoding="utf-8") as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    summary = (
+        f"## Intervals.icu reconciliation\n"
+        f"- Period: {options.start_date} to {today}\n"
+        f"- Source activities: {in_scope_count}; matched: {len(mapping)}; missing: 0\n"
+        f"- New summaries: {created}; exported history: {len(exported)}\n"
+        f"- Activity types: {json.dumps(report['by_type'])}\n"
+        f"- Supported files: {total}; downloaded: {downloaded_count}; "
+        f"unavailable: {report['files_unavailable']}\n"
+    )
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+            f.write(summary)
     print(
         f"Done. Downloaded {downloaded_count} new activities. "
         f"Exported {len(exported)} activities; "
-        f"{len(expected_dates)} distance activities expected from Intervals.icu."
+        f"{len(mapping)}/{in_scope_count} source activities reconciled."
     )
-    if missing_dates:
-        raise RuntimeError(
-            f"{len(missing_dates)} distance activities are missing from the export"
-        )
 
 
 if __name__ == "__main__":
