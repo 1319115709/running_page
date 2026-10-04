@@ -5,6 +5,7 @@ import * as polyline from '@mapbox/polyline';
 import type { Activity } from '../types';
 import { MAPBOX_TOKEN } from '../config';
 import { useLocale } from '../hooks/useLocale';
+import { formatDuration } from '../hooks/useActivities';
 import './RouteMap.css';
 
 export interface RouteMapProps {
@@ -284,7 +285,7 @@ export function RouteMapCanvas({
             title={selectedActivity?.name}
           >
             {selectedActivity
-              ? `${selectedActivity.name} · ${(selectedActivity.distance / 1000).toFixed(1)} km`
+              ? `${selectedActivity.name} · ${selectedActivity.distance > 0 ? `${(selectedActivity.distance / 1000).toFixed(1)} km` : formatDuration(selectedActivity.moving_time)}`
               : `${routes.length.toLocaleString()} ${zh ? '条轨迹' : 'routes'}`}
           </p>
         </div>

@@ -94,8 +94,7 @@ def hydrate_routes(session, candidates, mapping):
         if not track.start_time or not track.length:
             raise ValueError(f"Could not parse distance activity {raw['id']}")
         activity = session.get(Activity, mapping[f"intervals_icu:{raw['id']}"])
-        if track.polyline_str:
-            activity.summary_polyline = track.polyline_str
+        activity.summary_polyline = track.polyline_str or ""
         if track.subtype:
             activity.subtype = track.subtype
         if activity.average_heartrate is None and track.average_heartrate is not None:
@@ -305,7 +304,7 @@ def run():
     mapping, created = import_summaries(generator.session, activities)
     hydrate_routes(generator.session, candidates, mapping)
     generator.session.commit()
-    exported = generator.load(include_zero=True)
+    exported = generator.load(include_zero=True, virtual_indoor_routes=False)
     report = reconcile(
         activities,
         exported,

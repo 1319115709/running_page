@@ -233,7 +233,7 @@ class Generator:
 
         self.session.commit()
 
-    def load(self, include_zero=False):
+    def load(self, include_zero=False, virtual_indoor_routes=True):
         # if sub_type is not in the db, just add an empty string to it
         query = self.session.query(Activity)
         if not include_zero:
@@ -266,7 +266,8 @@ class Generator:
                 activity.summary_polyline = filter_out(activity.summary_polyline)  # type: ignore
             activity_list.append(activity.to_dict())
 
-        activity_list = self._fix_indoor_locations(activity_list)
+        if virtual_indoor_routes:
+            activity_list = self._fix_indoor_locations(activity_list)
 
         # Persist indoor subtype and virtual polyline back to DB so SVG generation can pick it up
         for a in activity_list:

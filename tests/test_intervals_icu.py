@@ -161,6 +161,19 @@ class ImportTests(unittest.TestCase):
         ):
             hydrate_routes(self.session, [(raw, "fit")], mapping)
 
+    def test_indoor_export_does_not_fabricate_gps_routes(self):
+        raw = summary(type="VirtualRun", distance=5000)
+        import_summaries(self.session, [raw])
+        self.session.commit()
+        generator = Generator(self.path)
+        with patch.object(generator, "_fix_indoor_locations") as virtual_routes:
+            rows = generator.load(include_zero=True, virtual_indoor_routes=False)
+            virtual_routes.assert_not_called()
+        self.assertEqual(rows[0]["summary_polyline"], "")
+        self.assertEqual(rows[0]["distance"], 5000)
+        generator.session.close()
+        generator.session.bind.dispose()
+
 
 if __name__ == "__main__":
     unittest.main()
