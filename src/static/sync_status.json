@@ -1,23 +1,23 @@
 {
   "provider": "intervals_icu",
-  "checked_at": "2026-10-21T02:29:01.743960+00:00",
+  "checked_at": "2026-10-22T02:25:05.919975+00:00",
   "start_date": "2026-05-25",
-  "source_count": 72,
-  "matched_count": 72,
+  "source_count": 73,
+  "matched_count": 73,
   "missing_count": 0,
   "by_type": {
     "Hike": 3,
     "Run": 10,
     "Swim": 4,
-    "VirtualRun": 10,
+    "VirtualRun": 11,
     "Walk": 11,
     "WeightTraining": 30,
     "Workout": 4
   },
-  "exported_count": 898,
+  "exported_count": 899,
   "deduplicated_count": 6,
-  "latest_activity": "2026-10-21T08:08:21",
+  "latest_activity": "2026-10-21T17:26:30",
   "files_downloaded": 1,
-  "files_supported": 72,
+  "files_supported": 73,
   "files_unavailable": 0
 }
